@@ -9,3 +9,5 @@ __pycache__/
 *.pkl
 
 data/
+
+qa_data.py
