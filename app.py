@@ -6,7 +6,7 @@ from langchain_core.output_parsers import StrOutputParser
 
 import config
 
-def main():
+def setup_pipeline():
     embeddings = OllamaEmbeddings(model=config.EMBEDDING_MODEL)
     
     # load the FAISS db
@@ -18,10 +18,10 @@ def main():
         )
     except Exception as e:
         print(f"Error loading db: {e}")
-        return
+        return None, None, None
 
     if hasattr(vector_store.index, "nprobe"):
-        vector_store.index.nprobe = config.NPROB        # x closest clusters for better accuracy
+        vector_store.index.nprobe = config.NPROBE        # x closest clusters for better accuracy
 
 
     print("Building index")
@@ -48,7 +48,7 @@ def main():
             section_index[section_id].append(chunk.page_content)
     
 
-    retriever = vector_store.as_retriever(search_kwargs={"k": 4})
+    retriever = vector_store.as_retriever(search_kwargs={"k": config.KWARGS})
     llm = OllamaLLM(model=config.SLM_MODEL)
     
     # prompt, change if needed
@@ -66,7 +66,56 @@ def main():
     ])
 
     llm_chain = prompt | llm | StrOutputParser()        # LCEL pipeline
+    return retriever, llm_chain, section_index
+
+def ask_question(user_query, retriever, llm_chain, section_index):
+    retrieved_docs = retriever.invoke(user_query)       # grabbing the 4 most relevant chunks
+
+    assembled_context = []
+    seen_sections = [] 
     
+    # iterating through the likely docs to gain context
+    for doc in retrieved_docs:
+        source = doc.metadata.get('source', 'unknown')
+        h1 = doc.metadata.get('Header 1', '')
+        h2 = doc.metadata.get('Header 2', '')
+        h3 = doc.metadata.get('Header 3', '')
+        
+        section_id = f"{source}::{h1}::{h2}::{h3}"
+        
+        # restiching the sections for better context
+        if (h1 or h2 or h3) and section_id not in seen_sections:
+            seen_sections.append(section_id) 
+            
+            section_chunks = section_index.get(section_id, [])
+            
+            header_title = h3 or h2 or h1
+            stitched_text = f"Section: {header_title} (Source: {source})\n" + "\n".join(section_chunks)       # breadcrumb trail
+            assembled_context.append(stitched_text)
+            
+        # failsafe for sections without headers
+        elif not (h1 or h2 or h3):
+            stitched_text = f"Section: Body Text (Source: {source})\n{doc.page_content}"                      # breadcrumb trail
+            assembled_context.append(stitched_text)
+            
+            # adding to the list if it is not already there
+            body_id = f"{source}::Body Text"
+            if body_id not in seen_sections:
+                seen_sections.append(body_id)
+                
+    formatted_context = "\n\n*****************\n\n".join(assembled_context)
+    
+    answer = llm_chain.invoke({
+        "context": formatted_context,
+        "input": user_query
+    })
+    return answer, seen_sections
+
+def main():
+    retriever, llm_chain, section_index = setup_pipeline()
+    if not retriever:
+        return
+        
     while True:
         user_query = input("\nAsk a question about your files (or type 'quit'): ")
         if user_query.lower() in ['quit', 'exit', 'q']:
@@ -74,47 +123,7 @@ def main():
             
         print("...")
         
-        
-        retrieved_docs = retriever.invoke(user_query)       # grabbing the 4 most relevant chunks
-
-        assembled_context = []
-        seen_sections = [] 
-        
-        # iterating through the likely docs to gain context
-        for doc in retrieved_docs:
-            source = doc.metadata.get('source', 'unknown')
-            h1 = doc.metadata.get('Header 1', '')
-            h2 = doc.metadata.get('Header 2', '')
-            h3 = doc.metadata.get('Header 3', '')
-            
-            section_id = f"{source}::{h1}::{h2}::{h3}"
-            
-            # restiching the sections for better context
-            if (h1 or h2 or h3) and section_id not in seen_sections:
-                seen_sections.append(section_id) 
-                
-                section_chunks = section_index.get(section_id, [])
-                
-                header_title = h3 or h2 or h1
-                stitched_text = f"Section: {header_title} (Source: {source})\n" + "\n".join(section_chunks)       # breadcrumb trail
-                assembled_context.append(stitched_text)
-                
-            # failsafe for sections without headers
-            elif not (h1 or h2 or h3):
-                stitched_text = f"Section: Body Text (Source: {source})\n{doc.page_content}"                      # breadcrumb trail
-                assembled_context.append(stitched_text)
-                
-                # adding to the list if it is not already there
-                body_id = f"{source}::Body Text"
-                if body_id not in seen_sections:
-                    seen_sections.append(body_id)
-                
-        formatted_context = "\n\n*****************\n\n".join(assembled_context)
-        
-        answer = llm_chain.invoke({
-            "context": formatted_context,
-            "input": user_query
-        })
+        answer, seen_sections = ask_question(user_query, retriever, llm_chain, section_index)
         
         print("\nAnswer:")
         print(answer)

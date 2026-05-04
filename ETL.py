@@ -72,6 +72,7 @@ def build_and_save_index():
         faiss_index = faiss.IndexFlatL2(config.FAISS_DIMENSION)
     else:
         # if the input files is over 2000 chunks then we will use IVFPQ for speed
+        # untested and probably wrong!
         sample_size = min(4000, len(all_chunks))
         sample_texts = [chunk.page_content for chunk in all_chunks[:sample_size]]
         sample_embeddings = embeddings.embed_documents(sample_texts)
