@@ -228,7 +228,7 @@ python test_rag.py
 HelpdeskRAG was evaluated against a fixed list of predetermined questions with known, expected answers. Each model response was scored by checking it against the documentation in two ways:
 
 - **Manual verification** — answers were read and compared against the source documents by hand to confirm they were correct and grounded in the retrieved context.
-- **Larger-model cross-checking** — answers were also reviewed using larger, more capable models (primarily **Gemini 3.1 Pro**) as a second judge, comparing each response against the expected answer to catch errors a manual pass might miss.
+- **Larger-model cross-checking** — answers were also reviewed using larger, more capable models as a second judge, comparing each response against the expected answer to catch errors a manual pass might miss.
 
 Using this combined approach, the system reached a best measured accuracy of **87.8%** across the test set. Because HelpdeskRAG runs on a small local model, accuracy depends heavily on the quality of the source documents, chunking settings, and the chosen Ollama model — re-running the evaluation after tuning these is the best way to gauge changes.
 
