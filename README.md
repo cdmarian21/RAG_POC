@@ -114,7 +114,7 @@ graph TD
 
 ```bash
 ollama pull mxbai-embed-large
-ollama pull gemma3:1b          # or whichever SLM you set in config.py
+ollama pull gemma4:e2b          # or whichever SLM you set in config.py
 ```
 
 > **Note:** The model name in `config.py` (`SLM_MODEL`) must exactly match a model available in your local Ollama install. Update it to a model you've pulled.
